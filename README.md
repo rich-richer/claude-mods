@@ -1,5 +1,7 @@
 # Claude Mods
 
+English | [中文](#中文说明)
+
 Two mods for Claude Code. They work in the terminal and in the Claude desktop app.
 
 | Mod | What it does |
@@ -57,3 +59,66 @@ claude plugin uninstall next-steps-plus
 ## License
 
 MIT. See [LICENSE](LICENSE).
+
+---
+
+## 中文说明
+
+这里有两个 Claude Code 的 mod，在终端版和 Claude 桌面 app 里都能用。
+
+| Mod | 功能 |
+| --- | --- |
+| [handoff](handoff) | Context 用到 6 成时，输入框上方会出现交接按钮。按下按钮或输入 `/handoff` 后，Claude 会写一份交接摘要，存到项目的 `.claude/handoffs/` 里，然后清空对话，把摘要作为新对话的第一句送出。 |
+| [next-steps-plus](next-steps-plus) | Claude 每次回复完，会在输入框上方给出最多 3 个下一步建议。按 `1`、`2`、`3` 把建议填进输入框（不会自动送出），按 `0` 关闭。颜色会跟着你的 Claude 主题变化，浅色、深色都清楚。 |
+
+### 安装
+
+在 Claude Code 终端版的对话里输入：
+
+```
+/plugin install handoff --marketplace rich-richer/claude-mods
+/plugin install next-steps-plus --marketplace rich-richer/claude-mods
+```
+
+或者在系统终端里执行：
+
+```bash
+claude plugin install handoff --marketplace rich-richer/claude-mods
+claude plugin install next-steps-plus --marketplace rich-richer/claude-mods
+```
+
+桌面 app 里不能用 `/plugin`，请改用菜单：点输入框旁的 **+**，选 **Plugins**，再选 **Add marketplace**，填 `rich-richer/claude-mods`，然后点 **Add plugin**。
+
+安装时问是否添加 marketplace，回答 `y`。范围选 user，以后每个新对话都会自动加载。
+
+### handoff
+
+- 输入框上方显示 `Context 已用 62%  [交接到新对话]  ×`，超过 8 成时会变成醒目的警示色。
+- 按 `×` 可以先隐藏，等 context 再多用 1 成时重新出现。
+- 交接摘要分 6 段：目标、已完成、未完成 / 下一步、改过的文件、要注意的地方、关键信息（命令、网址、设定值等）。
+- 摘要在后台根据同一段对话来写，不会在对话里多出一轮。
+- Claude 回复时按钮会变灰，要等回复完才能按。
+- 交接前对话至少要有一轮完整回复，否则写不出摘要，对话也不会被清空。
+
+### next-steps-plus
+
+改自 Thariq Shihipar 的 [next-steps](https://github.com/anthropics/claude-plugins-community/tree/main/next-steps)（MIT 授权），功能和原版相同。改动有两处：
+
+- 除了终端版，桌面 app 里也能显示。
+- 不用固定颜色，改用主题色：`next:` 标题是 Claude 橙色，以 `/` 开头的指令类建议是蓝色，`dismiss` 和 `next steps…` 是灰色。
+
+| 设定 | 默认值 | 作用 |
+| --- | --- | --- |
+| `minAnswerChars` | `80` | Claude 的回复少于这个字数时不给建议 |
+| `suggestSkills` | `true` | 让建议里可以出现这个对话可用的技能和斜杠指令 |
+
+### 移除
+
+```bash
+claude plugin uninstall handoff
+claude plugin uninstall next-steps-plus
+```
+
+### 授权
+
+MIT，详见 [LICENSE](LICENSE)。
