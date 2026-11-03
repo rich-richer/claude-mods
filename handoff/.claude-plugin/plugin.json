@@ -1,0 +1,10 @@
+{
+  "name": "handoff",
+  "version": "0.1.0",
+  "description": "Context 用到六成时在输入框上方出现交接按钮：写交接摘要、存档、清空对话、在新对话接续",
+  "types": "./types/index.d.ts",
+  "author": {
+    "name": "rich-richer"
+  },
+  "license": "MIT"
+}

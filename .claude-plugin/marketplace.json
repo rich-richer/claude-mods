@@ -1,0 +1,21 @@
+{
+  "name": "claude-mods",
+  "owner": {
+    "name": "rich-richer"
+  },
+  "plugins": [
+    {
+      "name": "handoff",
+      "source": "./handoff",
+      "description": "A handoff button above the prompt once context reaches 60%: writes a summary, saves it, clears, and continues in a fresh conversation"
+    },
+    {
+      "name": "next-steps-plus",
+      "source": "./next-steps-plus",
+      "description": "Up to three next-prompt suggestions after each turn, in theme-aware colors"
+    }
+  ],
+  "metadata": {
+    "description": "Claude Code mods: a context handoff button and themed next-step suggestions"
+  }
+}
