@@ -22,8 +22,17 @@ function engine(on: any, percent: number, calls: string[]) {
     return <Box />
   })
   on('session.usage', () => ({
-    value: { startedAt: 0, context: { window: 200000, percent }, rateLimits: [] },
+    value: {
+      startedAt: 0,
+      context: { window: 200000, percent },
+      rateLimits: [{ kind: 'five_hour', percentUsed: 23 }],
+    },
   }))
+  on('session.model', () => ({ value: 'claude-opus-5-5' }))
+  on('fs.read', (_: unknown, e: { path: string }) => {
+    if (e.path === '/proj/.git/HEAD') return { value: 'ref: refs/heads/main\n' }
+    throw new Error('ENOENT')
+  })
   on('session.start', (_: unknown, e: { cwd: string }) => ({ cwd: e.cwd }))
   on('session.root', () => ({ value: '/proj' }))
   on('clock.now', () => ({ value: Date.UTC(2026, 10, 2, 6, 30, 0) }))
@@ -46,11 +55,28 @@ function engine(on: any, percent: number, calls: string[]) {
   })
 }
 
-test('below 60% the band shows nothing', async ($, on) => {
+test('below 60% the app shows the info bar without the button', async ($, on) => {
   engine(on, 40, [])
   await $.session.start({ cwd: '/proj', surface: 'desktop', isInteractive: true })
 
-  const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  for (const surface of ['desktop', 'vscode', 'mobile'] as const) {
+    const ui = await $.ui.mount({ ...BAND, surface })
+    expect((await ui.find({ type: 'Text', text: /Opus 5\.5/ }))?.text).toBe('[Opus 5.5]')
+    expect((await ui.find({ type: 'Text', text: /^proj$/ }))?.text).toBe('proj')
+    expect((await ui.find({ type: 'Text', text: /^main$/ }))?.text).toBe('main')
+    expect(await ui.find({ type: 'Text', text: /40%/ })).toBeDefined()
+    expect((await ui.find({ type: 'Text', text: /5h/ }))?.text).toBe('5h 用量 23%')
+    expect(await ui.find({ key: 'go' })).toBeUndefined()
+    await ui.unmount()
+  }
+})
+
+test('below 60% the terminal shows nothing', async ($, on) => {
+  engine(on, 40, [])
+  await $.session.start({ cwd: '/proj', surface: 'terminal', isInteractive: true })
+
+  const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  expect(await ui.find({ type: 'Text', text: /Context/ })).toBeUndefined()
   expect(await ui.find({ key: 'go' })).toBeUndefined()
   await ui.unmount()
 })
@@ -60,11 +86,15 @@ test('at 65% the button hands off: summary, file, clear, first prompt', async ($
   engine(on, 65, calls)
   await $.session.start({ cwd: '/proj', surface: 'desktop', isInteractive: true })
 
-  for (const surface of ['terminal', 'desktop'] as const) {
-    const ui = await $.ui.mount({ ...BAND, surface })
-    expect((await ui.find({ type: 'Text', text: /65%/ }))?.text).toBe('Context 已用 65%')
-    await ui.unmount()
-  }
+  // 终端只有交接这一段；app 是资讯条加按钮，在同一行
+  const term = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  expect((await term.find({ type: 'Text', text: /65%/ }))?.text).toBe('Context 已用 65%')
+  expect(await term.find({ type: 'Text', text: /Opus/ })).toBeUndefined()
+  await term.unmount()
+  const app = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  expect(await app.find({ type: 'Text', text: /Opus 5\.5/ })).toBeDefined()
+  expect(await app.find({ key: 'go' })).toBeDefined()
+  await app.unmount()
 
   const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
   await ui.press({ key: 'go' })

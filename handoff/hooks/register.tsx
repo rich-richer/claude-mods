@@ -1,14 +1,23 @@
 import { atom, read, update } from 'claude-code'
-import type { EngineInterface, Register } from 'claude-code'
+import type { EngineInterface, Register, ThemeKey } from 'claude-code'
+
+import type { Info } from '../types'
 
 // 用到几成时出现按钮，几成以上变醒目颜色
 const SHOW_AT = 60
 const WARN_AT = 80
+const BAR_CELLS = 10
 
 const percent = atom({ plugin: 'handoff', key: 'percent' } as const, 0)
 // 按 × 后，到这个百分比才再出现
 const hiddenBelow = atom({ plugin: 'handoff', key: 'hiddenBelow' } as const, 0)
 const isRunning = atom({ plugin: 'handoff', key: 'isRunning' } as const, false)
+const info = atom({ plugin: 'handoff', key: 'info' } as const, {
+  model: null,
+  project: null,
+  branch: null,
+  fiveHour: null,
+} as Info)
 
 const SUMMARY_PROMPT = `请为这段对话写一份交接摘要，让一个全新的对话（看不到以上任何内容）可以无缝接手。
 只输出摘要本身，用中文、Markdown，依序包含这 6 段：
@@ -40,12 +49,48 @@ function stamp(ms: number) {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`
 }
 
+// claude-opus-5-5 → Opus 5.5；认不出的名称原样显示
+function modelName(id: string) {
+  const m = /^claude-([a-z]+)-(\d+)-(\d+)/.exec(id)
+  if (m === null) return id
+  return `${m[1][0].toUpperCase()}${m[1].slice(1)} ${m[2]}.${m[3]}`
+}
+
+function baseName(path: string) {
+  return path.replace(/\/+$/, '').split('/').pop() || path
+}
+
+// 从 .git/HEAD 读分支；不是 git 仓库或读不到就是 null
+async function branchOf($: EngineInterface, root: string) {
+  try {
+    const head = (await $.fs.read(`${root}/.git/HEAD`)).trim()
+    if (head.startsWith('ref: refs/heads/')) return head.slice('ref: refs/heads/'.length)
+    return /^[0-9a-f]{7,}$/.test(head) ? head.slice(0, 7) : null
+  } catch {
+    return null
+  }
+}
+
+function barColor(now: number): ThemeKey {
+  if (now >= WARN_AT) return 'error'
+  return now >= SHOW_AT ? 'warning' : 'success'
+}
+
 async function refresh($: EngineInterface) {
-  const { context } = await $.session.usage()
+  const { context, rateLimits } = await $.session.usage()
   const now = context.percent ?? 0
   await update($, percent, () => now)
   // 清空对话后 context 掉回去，× 的记录也跟着重置
   if (now < SHOW_AT) await update($, hiddenBelow, () => 0)
+
+  const root = await $.session.root()
+  const next: Info = {
+    model: modelName(await $.session.model()),
+    project: baseName(root),
+    branch: await branchOf($, root),
+    fiveHour: rateLimits.find(r => r.kind === 'five_hour')?.percentUsed ?? null,
+  }
+  await update($, info, () => next)
 }
 
 async function handoff($: EngineInterface): Promise<string> {
@@ -108,41 +153,70 @@ export const register: Register = on => {
     const now = await read($, percent)
     const hidden = await read($, hiddenBelow)
     const running = await read($, isRunning)
+    const shown = await read($, info)
+    // 资讯条只在 app 里画，终端交给 claude-hud
+    const showInfo = e.surface !== 'terminal'
+    const showHandoff = running || (now >= SHOW_AT && now >= hidden)
 
-    if (e.props.hasSurvey || (!running && (now < SHOW_AT || now < hidden))) {
+    if (e.props.hasSurvey || (!showInfo && !showHandoff)) {
       return next(e)
     }
 
     const { Box, Button, Text } = $.ui.resolve(e)
     const isBusy = running || e.props.isWorking
     const isHot = now >= WARN_AT
-    // 其他 mod（如 next-steps-plus）画的内容排在交接这一行下面
+    // 其他 mod（如 next-steps-plus）画的内容排在这一行下面
     const below = await next(e)
+    const filled = Math.round((Math.min(100, now) / 100) * BAR_CELLS)
+    const parts = [
+      shown.model && <Text color="suggestion">[{shown.model}]</Text>,
+      shown.project && <Text>{shown.project}</Text>,
+      shown.branch && <Text color="inactive">{shown.branch}</Text>,
+      <Text>
+        <Text color="inactive">Context </Text>
+        <Text color={barColor(now)}>{'█'.repeat(filled)}</Text>
+        <Text color="inactive">{'░'.repeat(BAR_CELLS - filled)}</Text>
+        <Text color={barColor(now)}> {now}%</Text>
+      </Text>,
+      shown.fiveHour !== null && (
+        <Text color="inactive">5h 用量 {Math.round(shown.fiveHour)}%</Text>
+      ),
+    ].filter(Boolean)
 
     return (
       <Box flexDirection="column">
-        <Box flexDirection="row" gap={2}>
-          <Text color={isHot ? 'warning' : undefined} bold={isHot}>
-            Context 已用 {now}%
-          </Text>
-          <Button
-            key="go"
-            label={running ? '交接中…' : '交接到新对话'}
-            variant="primary"
-            dimColor={isBusy}
-            onPress={() => {
-              if (!isBusy) void handoff($)
-            }}
-          />
-          <Button
-            key="hide"
-            label="×"
-            plain
-            role="dismiss"
-            onPress={() =>
-              update($, hiddenBelow, () => (Math.floor(now / 10) + 1) * 10)
-            }
-          />
+        <Box flexDirection="row" gap={1} flexWrap="wrap">
+          {showInfo &&
+            parts.flatMap((part, i) =>
+              i === 0 ? [part] : [<Text color="inactive">│</Text>, part],
+            )}
+          {!showInfo && (
+            <Text color={isHot ? 'warning' : undefined} bold={isHot}>
+              Context 已用 {now}%
+            </Text>
+          )}
+          {showHandoff && (
+            <Button
+              key="go"
+              label={running ? '交接中…' : '交接到新对话'}
+              variant="primary"
+              dimColor={isBusy}
+              onPress={() => {
+                if (!isBusy) void handoff($)
+              }}
+            />
+          )}
+          {showHandoff && (
+            <Button
+              key="hide"
+              label="×"
+              plain
+              role="dismiss"
+              onPress={() =>
+                update($, hiddenBelow, () => (Math.floor(now / 10) + 1) * 10)
+              }
+            />
+          )}
         </Box>
         {below}
       </Box>
