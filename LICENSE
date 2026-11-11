@@ -2,6 +2,8 @@ MIT License
 
 Copyright (c) 2026 rich-richer
 next-steps-plus is based on next-steps, Copyright (c) Thariq Shihipar, MIT License.
+blast-radius/ is not covered by this license: it is Copyright 2026 Anthropic PBC,
+licensed under the Apache License 2.0, copied unchanged; see blast-radius/LICENSE.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal

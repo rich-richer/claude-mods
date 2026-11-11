@@ -13,9 +13,14 @@
       "name": "next-steps-plus",
       "source": "./next-steps-plus",
       "description": "Up to three next-prompt suggestions after each turn, in theme-aware colors"
+    },
+    {
+      "name": "blast-radius",
+      "source": "./blast-radius",
+      "description": "Holds risky shell commands (rm -rf, git reset --hard, git clean, force push, migrations) and shows what they would change, with Proceed and Cancel buttons. Copied unchanged from anthropics/claude-code-playground (Apache-2.0)."
     }
   ],
   "metadata": {
-    "description": "Claude Code mods: a context handoff button and themed next-step suggestions"
+    "description": "Claude Code mods: a context handoff button with an info bar, themed next-step suggestions, and Blast Radius"
   }
 }
