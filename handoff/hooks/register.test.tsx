@@ -13,7 +13,13 @@ const BAND = {
   },
 } as const
 
-function engine(on: any, percent: number, calls: string[]) {
+// 每次读用量依序取下一组用量上限，取完后一直用最后一组
+function engine(
+  on: any,
+  percent: number,
+  calls: string[],
+  limits: unknown[][] = [[{ kind: 'five_hour', percentUsed: 23 }]],
+) {
   on('command.register', () => ({ value: { command: 'handoff' } }))
   on('ui.toast', () => ({ value: undefined }))
   // 引擎自己的画法：什么都不画
@@ -25,10 +31,11 @@ function engine(on: any, percent: number, calls: string[]) {
     value: {
       startedAt: 0,
       context: { window: 200000, percent },
-      rateLimits: [{ kind: 'five_hour', percentUsed: 23 }],
+      rateLimits: limits.length > 1 ? limits.shift() : limits[0],
     },
   }))
   on('session.model', () => ({ value: 'claude-opus-5-5' }))
+  on('session.measure', (_: unknown, e: { changed: string[] }) => ({ changed: e.changed }))
   on('fs.read', (_: unknown, e: { path: string }) => {
     if (e.path === '/proj/.git/HEAD') return { value: 'ref: refs/heads/main\n' }
     throw new Error('ENOENT')
@@ -113,5 +120,16 @@ test('× hides the band until the next tenth', async ($, on) => {
   const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
   await ui.press({ key: 'hide' })
   expect(await ui.find({ key: 'go' })).toBeUndefined()
+  await ui.unmount()
+})
+
+test('an empty rate-limit reading keeps the last 5h figure', async ($, on) => {
+  // 第一次有读数，之后计时器读到的都是空列表
+  engine(on, 40, [], [[{ kind: 'five_hour', percentUsed: 23 }], []])
+  await $.session.start({ cwd: '/proj', surface: 'desktop', isInteractive: true })
+  await $.session.measure({ context: { window: 200000, percent: 40 }, rateLimits: [], changed: ['context'] })
+
+  const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  expect((await ui.find({ type: 'Text', text: /5h/ }))?.text).toBe('5h 用量 23%')
   await ui.unmount()
 })

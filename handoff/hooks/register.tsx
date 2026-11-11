@@ -84,13 +84,16 @@ async function refresh($: EngineInterface) {
   if (now < SHOW_AT) await update($, hiddenBelow, () => 0)
 
   const root = await $.session.root()
-  const next: Info = {
-    model: modelName(await $.session.model()),
+  const model = modelName(await $.session.model())
+  const branch = await branchOf($, root)
+  const fiveHour = rateLimits.find(r => r.kind === 'five_hour')?.percentUsed
+  // 用量只在有读数时才更新；计时器那边常读到空列表，不能拿来清掉上一次的数字
+  await update($, info, prev => ({
+    model,
     project: baseName(root),
-    branch: await branchOf($, root),
-    fiveHour: rateLimits.find(r => r.kind === 'five_hour')?.percentUsed ?? null,
-  }
-  await update($, info, () => next)
+    branch,
+    fiveHour: fiveHour ?? prev.fiveHour,
+  }))
 }
 
 async function handoff($: EngineInterface): Promise<string> {
@@ -138,6 +141,13 @@ export const register: Register = on => {
 
   on('turn.complete', async ($, e, next) => {
     if (e.agentId === undefined) await refresh($)
+
+    return next(e)
+  })
+
+  // 引擎每轮结束、用量变动时主动推送最新读数
+  on('session.measure', async ($, e, next) => {
+    await refresh($)
 
     return next(e)
   })
