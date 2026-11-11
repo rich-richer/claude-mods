@@ -39,7 +39,7 @@ Answer `y` to add the marketplace, then pick the user scope so the mods load in 
   The context bar is green below 60%, yellow from 60% and red from 80%. The branch is hidden outside a git repository. It costs no tokens: it reads local data only.
 - `缓存 42 分` counts down the minutes left before the prompt cache goes cold, from the end of Claude's last reply. It assumes the 60-minute cache of a subscription plan (past your usage limits the cache drops to 5 minutes and the countdown runs optimistic). It turns yellow at 15 minutes, red at 5, and reads `缓存已过期` once expired. It is hidden while Claude is answering and before the first reply. Nothing is sent to keep the cache warm.
 - From 60% the line adds `[交接到新对话]  ×`. `×` hides the button (not the info bar) until the context grows another 10%.
-- In the terminal the info bar is not drawn (a status line plugin such as claude-hud covers it there); from 60% the terminal shows `Context 已用 62%  [交接到新对话]  ×`, in the warning color past 80%.
+- In the terminal the info bar is not drawn (a status line plugin such as claude-hud covers it there), except the cache countdown: after a reply the terminal shows `缓存 42 分` alone, and from 60% adds `Context 已用 62%  [交接到新对话]  ×` on the same line, in the warning color past 80%.
 - The summary has six parts: goal, done, not done / next steps, files changed, things to watch out for, and key details (commands, URLs, settings).
 - The summary is written in the background from the same conversation, so it does not add a turn.
 - The button is greyed out while Claude is answering.
@@ -118,7 +118,7 @@ claude plugin install blast-radius --marketplace rich-richer/claude-mods
   进度条低于 6 成是绿色，6～8 成黄色，8 成以上红色；不是 git 仓库时不显示分支。资讯条只读本机数据，不消耗 token。
 - `缓存 42 分` 是提示缓存（prompt cache）还剩几分钟过期，从 Claude 最后一次回复完开始倒数。按订阅方案的 60 分钟计算；用量超额时缓存会缩短为 5 分钟，倒数会比实际乐观。剩 15 分钟变黄、5 分钟变红，过期显示 `缓存已过期`。Claude 回复中、以及还没回复过一轮时不显示。不会自动送消息保温。
 - 用到 6 成时，同一行末尾出现 `[交接到新对话]  ×`。按 `×` 只隐藏按钮、不隐藏资讯条，等 context 再多用 1 成时按钮重新出现。
-- 终端版不显示资讯条（可改用 claude-hud 这类状态栏插件）；用到 6 成时显示 `Context 已用 62%  [交接到新对话]  ×`，超过 8 成变成警示色。
+- 终端版不显示资讯条（可改用 claude-hud 这类状态栏插件），只显示缓存倒数：回复后只有 `缓存 42 分`；用到 6 成时同一行再加上 `Context 已用 62%  [交接到新对话]  ×`，超过 8 成变成警示色。
 - 交接摘要分 6 段：目标、已完成、未完成 / 下一步、改过的文件、要注意的地方、关键信息（命令、网址、设定值等）。
 - 摘要在后台根据同一段对话来写，不会在对话里多出一轮。
 - Claude 回复时按钮会变灰，要等回复完才能按。

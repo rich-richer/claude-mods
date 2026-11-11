@@ -182,3 +182,32 @@ test('the cache countdown hides while Claude is working', async ($, on) => {
   expect(await ui.find({ type: 'Text', text: /缓存/ })).toBeUndefined()
   await ui.unmount()
 })
+
+test('the terminal shows only the cache countdown, plus the button from 60%', async ($, on) => {
+  clock.now = Date.UTC(2026, 10, 2, 6, 30, 0)
+  engine(on, 40, [])
+  await $.session.start({ cwd: '/proj', surface: 'terminal', isInteractive: true })
+  await finishTurn($)
+  clock.now += 18 * MIN
+  await $.session.measure({ context: { window: 200000, percent: 40 }, rateLimits: [], changed: ['context'] })
+
+  const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  expect((await ui.find({ type: 'Text', text: /缓存/ }))?.text).toBe('缓存 42 分')
+  expect(await ui.find({ type: 'Text', text: /Opus/ })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: /Context/ })).toBeUndefined()
+  expect(await ui.find({ key: 'go' })).toBeUndefined()
+  await ui.unmount()
+})
+
+test('at 65% the terminal shows the countdown and the handoff button together', async ($, on) => {
+  clock.now = Date.UTC(2026, 10, 2, 6, 30, 0)
+  engine(on, 65, [])
+  await $.session.start({ cwd: '/proj', surface: 'terminal', isInteractive: true })
+  await finishTurn($)
+
+  const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  expect((await ui.find({ type: 'Text', text: /缓存/ }))?.text).toBe('缓存 60 分')
+  expect((await ui.find({ type: 'Text', text: /65%/ }))?.text).toBe('Context 已用 65%')
+  expect(await ui.find({ key: 'go' })).toBeDefined()
+  await ui.unmount()
+})

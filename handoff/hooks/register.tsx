@@ -184,11 +184,16 @@ export const register: Register = on => {
     const shown = await read($, info)
     const repliedAt = await read($, lastReplyAt)
     const clock = await read($, clockNow)
-    // 资讯条只在 app 里画，终端交给 claude-hud
+    // 资讯条只在 app 里画，终端交给 claude-hud；缓存倒数两边都画
     const showInfo = e.surface !== 'terminal'
     const showHandoff = running || (now >= SHOW_AT && now >= hidden)
+    // 回复中缓存正在续期，不显示；还没回复过一轮也不显示
+    const cacheLeft =
+      repliedAt === null || e.props.isWorking
+        ? null
+        : Math.ceil(CACHE_MINUTES - (Math.max(clock, repliedAt) - repliedAt) / 60_000)
 
-    if (e.props.hasSurvey || (!showInfo && !showHandoff)) {
+    if (e.props.hasSurvey || (!showInfo && !showHandoff && cacheLeft === null)) {
       return next(e)
     }
 
@@ -198,11 +203,12 @@ export const register: Register = on => {
     // 其他 mod（如 next-steps-plus）画的内容排在这一行下面
     const below = await next(e)
     const filled = Math.round((Math.min(100, now) / 100) * BAR_CELLS)
-    // 回复中缓存正在续期，不显示；还没回复过一轮也不显示
-    const cacheLeft =
-      repliedAt === null || e.props.isWorking
-        ? null
-        : Math.ceil(CACHE_MINUTES - (Math.max(clock, repliedAt) - repliedAt) / 60_000)
+    const cachePart =
+      cacheLeft === null ? null : cacheLeft > 0 ? (
+        <Text color={cacheColor(cacheLeft)}>缓存 {cacheLeft} 分</Text>
+      ) : (
+        <Text color="error">缓存已过期</Text>
+      )
     const parts = [
       shown.model && <Text color="suggestion">[{shown.model}]</Text>,
       shown.project && <Text>{shown.project}</Text>,
@@ -216,12 +222,7 @@ export const register: Register = on => {
       shown.fiveHour !== null && (
         <Text color="inactive">5h 用量 {Math.round(shown.fiveHour)}%</Text>
       ),
-      cacheLeft !== null &&
-        (cacheLeft > 0 ? (
-          <Text color={cacheColor(cacheLeft)}>缓存 {cacheLeft} 分</Text>
-        ) : (
-          <Text color="error">缓存已过期</Text>
-        )),
+      cachePart,
     ].filter(Boolean)
 
     return (
@@ -231,7 +232,8 @@ export const register: Register = on => {
             parts.flatMap((part, i) =>
               i === 0 ? [part] : [<Text color="inactive">│</Text>, part],
             )}
-          {!showInfo && (
+          {!showInfo && cachePart}
+          {!showInfo && showHandoff && (
             <Text color={isHot ? 'warning' : undefined} bold={isHot}>
               Context 已用 {now}%
             </Text>
