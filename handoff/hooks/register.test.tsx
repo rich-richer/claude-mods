@@ -14,6 +14,10 @@ const BAND = {
 } as const
 
 // 每次读用量依序取下一组用量上限，取完后一直用最后一组
+// 测试可以拨动的时钟
+const clock = { now: Date.UTC(2026, 10, 2, 6, 30, 0) }
+const MIN = 60_000
+
 function engine(
   on: any,
   percent: number,
@@ -36,13 +40,14 @@ function engine(
   }))
   on('session.model', () => ({ value: 'claude-opus-5-5' }))
   on('session.measure', (_: unknown, e: { changed: string[] }) => ({ changed: e.changed }))
+  on('turn.complete', (_: unknown, e: { answer: string }) => ({ text: e.answer }))
   on('fs.read', (_: unknown, e: { path: string }) => {
     if (e.path === '/proj/.git/HEAD') return { value: 'ref: refs/heads/main\n' }
     throw new Error('ENOENT')
   })
   on('session.start', (_: unknown, e: { cwd: string }) => ({ cwd: e.cwd }))
   on('session.root', () => ({ value: '/proj' }))
-  on('clock.now', () => ({ value: Date.UTC(2026, 10, 2, 6, 30, 0) }))
+  on('clock.now', () => ({ value: clock.now }))
   on('clock.every', () => ({ value: undefined }))
   on('model.fork', () => {
     calls.push('fork')
@@ -131,5 +136,49 @@ test('an empty rate-limit reading keeps the last 5h figure', async ($, on) => {
 
   const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
   expect((await ui.find({ type: 'Text', text: /5h/ }))?.text).toBe('5h 用量 23%')
+  await ui.unmount()
+})
+
+async function finishTurn($: any) {
+  await $.turn.complete({ reason: 'answer', answer: 'ok', turnId: 't1', durationMs: 1, isAborted: false })
+}
+
+async function cacheText($: any) {
+  const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  const found = await ui.find({ type: 'Text', text: /缓存/ })
+  await ui.unmount()
+  return found?.text
+}
+
+test('the cache countdown shows only after a reply, then counts down and expires', async ($, on) => {
+  clock.now = Date.UTC(2026, 10, 2, 6, 30, 0)
+  engine(on, 40, [])
+  await $.session.start({ cwd: '/proj', surface: 'desktop', isInteractive: true })
+  expect(await cacheText($)).toBeUndefined()
+
+  const repliedAt = clock.now
+  await finishTurn($)
+  expect(await cacheText($)).toBe('缓存 60 分')
+
+  clock.now = repliedAt + 18 * MIN
+  await $.session.measure({ context: { window: 200000, percent: 40 }, rateLimits: [], changed: ['context'] })
+  expect(await cacheText($)).toBe('缓存 42 分')
+
+  clock.now = repliedAt + 50 * MIN
+  await $.session.measure({ context: { window: 200000, percent: 40 }, rateLimits: [], changed: ['context'] })
+  expect(await cacheText($)).toBe('缓存 10 分')
+
+  clock.now = repliedAt + 61 * MIN
+  await $.session.measure({ context: { window: 200000, percent: 40 }, rateLimits: [], changed: ['context'] })
+  expect(await cacheText($)).toBe('缓存已过期')
+})
+
+test('the cache countdown hides while Claude is working', async ($, on) => {
+  clock.now = Date.UTC(2026, 10, 2, 6, 30, 0)
+  engine(on, 40, [])
+  await $.session.start({ cwd: '/proj', surface: 'desktop', isInteractive: true })
+  await finishTurn($)
+  const ui = await $.ui.mount({ ...BAND, surface: 'desktop', props: { ...BAND.props, isWorking: true } })
+  expect(await ui.find({ type: 'Text', text: /缓存/ })).toBeUndefined()
   await ui.unmount()
 })

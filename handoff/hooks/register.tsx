@@ -7,6 +7,10 @@ import type { Info } from '../types'
 const SHOW_AT = 60
 const WARN_AT = 80
 const BAR_CELLS = 10
+// 订阅方案的提示缓存约 60 分钟没有新请求就过期；用量超额时会缩短为 5 分钟，这里不区分
+const CACHE_MINUTES = 60
+const CACHE_WARN_MINUTES = 15
+const CACHE_HOT_MINUTES = 5
 
 const percent = atom({ plugin: 'handoff', key: 'percent' } as const, 0)
 // 按 × 后，到这个百分比才再出现
@@ -18,6 +22,9 @@ const info = atom({ plugin: 'handoff', key: 'info' } as const, {
   branch: null,
   fiveHour: null,
 } as Info)
+// 主对话最后一次回复完的时间，和计时器刷新时的当前时间，用来算缓存还剩几分钟
+const lastReplyAt = atom({ plugin: 'handoff', key: 'lastReplyAt' } as const, null as number | null)
+const clockNow = atom({ plugin: 'handoff', key: 'clockNow' } as const, 0)
 
 const SUMMARY_PROMPT = `请为这段对话写一份交接摘要，让一个全新的对话（看不到以上任何内容）可以无缝接手。
 只输出摘要本身，用中文、Markdown，依序包含这 6 段：
@@ -76,7 +83,14 @@ function barColor(now: number): ThemeKey {
   return now >= SHOW_AT ? 'warning' : 'success'
 }
 
+function cacheColor(minutesLeft: number): ThemeKey {
+  if (minutesLeft <= CACHE_HOT_MINUTES) return 'error'
+  return minutesLeft <= CACHE_WARN_MINUTES ? 'warning' : 'inactive'
+}
+
 async function refresh($: EngineInterface) {
+  const t = await $.clock.now()
+  await update($, clockNow, () => t)
   const { context, rateLimits } = await $.session.usage()
   const now = context.percent ?? 0
   await update($, percent, () => now)
@@ -140,7 +154,11 @@ export const register: Register = on => {
   })
 
   on('turn.complete', async ($, e, next) => {
-    if (e.agentId === undefined) await refresh($)
+    if (e.agentId === undefined) {
+      const t = await $.clock.now()
+      await update($, lastReplyAt, () => t)
+      await refresh($)
+    }
 
     return next(e)
   })
@@ -164,6 +182,8 @@ export const register: Register = on => {
     const hidden = await read($, hiddenBelow)
     const running = await read($, isRunning)
     const shown = await read($, info)
+    const repliedAt = await read($, lastReplyAt)
+    const clock = await read($, clockNow)
     // 资讯条只在 app 里画，终端交给 claude-hud
     const showInfo = e.surface !== 'terminal'
     const showHandoff = running || (now >= SHOW_AT && now >= hidden)
@@ -178,6 +198,11 @@ export const register: Register = on => {
     // 其他 mod（如 next-steps-plus）画的内容排在这一行下面
     const below = await next(e)
     const filled = Math.round((Math.min(100, now) / 100) * BAR_CELLS)
+    // 回复中缓存正在续期，不显示；还没回复过一轮也不显示
+    const cacheLeft =
+      repliedAt === null || e.props.isWorking
+        ? null
+        : Math.ceil(CACHE_MINUTES - (Math.max(clock, repliedAt) - repliedAt) / 60_000)
     const parts = [
       shown.model && <Text color="suggestion">[{shown.model}]</Text>,
       shown.project && <Text>{shown.project}</Text>,
@@ -191,6 +216,12 @@ export const register: Register = on => {
       shown.fiveHour !== null && (
         <Text color="inactive">5h 用量 {Math.round(shown.fiveHour)}%</Text>
       ),
+      cacheLeft !== null &&
+        (cacheLeft > 0 ? (
+          <Text color={cacheColor(cacheLeft)}>缓存 {cacheLeft} 分</Text>
+        ) : (
+          <Text color="error">缓存已过期</Text>
+        )),
     ].filter(Boolean)
 
     return (

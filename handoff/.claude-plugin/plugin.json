@@ -1,6 +1,6 @@
 {
   "name": "handoff",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "在 app 输入框上方显示模型、项目、分支、context 与用量的资讯条；context 用到六成时同一行出现交接按钮：写交接摘要、存档、清空对话、在新对话接续",
   "types": "./types/index.d.ts",
   "author": {

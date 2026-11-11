@@ -12,6 +12,15 @@ export type Info = {
 
 declare module 'claude-code' {
   interface PluginState {
-    handoff: { percent: Percent; hiddenBelow: Percent; isRunning: boolean; info: Info }
+    handoff: {
+      percent: Percent
+      hiddenBelow: Percent
+      isRunning: boolean
+      info: Info
+      // 主对话最后一次回复完的时间（毫秒），还没回复过为 null
+      lastReplyAt: number | null
+      // 计时器最近一次刷新的时间（毫秒）
+      clockNow: number
+    }
   }
 }
